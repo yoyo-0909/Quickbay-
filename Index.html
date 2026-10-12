@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>QuickBay | Uber for Certified Car Workshops</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            qb: {
+              black: '#000000',
+              gray900: '#121212',
+              gray800: '#1e1e1e',
+              gray700: '#2d2d2d',
+              gray500: '#757575',
+              gray300: '#d1d5db',
+              gray200: '#e5e7eb',
+              gray100: '#f3f4f6',
+              gray50: '#fafafa',
+              white: '#ffffff',
+              green: '#05a357',
+              red: '#e11900'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Typography & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- Leaflet Map CSS & Script -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- QR Code Generator library for payment modal -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <style>
+    * {
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    input, textarea, select {
+      user-select: text;
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    /* Animated Driving Car CSS */
+    @keyframes roadMove {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-48px); }
+    }
+    @keyframes carBounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-3px); }
+    }
+    @keyframes wheelSpin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    @keyframes exhaustPuff {
+      0% { transform: translate(0, 0) scale(0.6); opacity: 0.9; }
+      100% { transform: translate(-28px, -12px) scale(2.2); opacity: 0; }
+    }
+    @keyframes radarScan {
+      0% { transform: translateY(-100%); }
+      100% { transform: translateY(100%); }
+    }
+
+    .road-lines {
+      background: repeating-linear-gradient(90deg, #ffffff 0, #ffffff 22px, transparent 22px, transparent 48px);
+      animation: roadMove 0.35s linear infinite;
+    }
+    .car-chassis {
+      animation: carBounce 0.28s ease-in-out infinite;
+    }
+    .wheel-rotate {
+      animation: wheelSpin 0.3s linear infinite;
+    }
+    .smoke-1 {
+      animation: exhaustPuff 0.6s infinite ease-out;
+    }
+    .smoke-2 {
+      animation: exhaustPuff 0.6s infinite ease-out 0.2s;
+    }
+    .radar-line {
+      animation: radarScan 1.6s ease-in-out infinite alternate;
+    }
+
+    /* Holographic India number plate border */
+    .plate-holo {
+      background: linear-gradient(135deg, #f0f0f0 0%, #ffffff 50%, #e0e0e0 100%);
+      box-shadow: inset 0 0 0 2px #000000;
+    }
+
+    /* Uber Leaflet overrides */
+    .leaflet-container {
+      background: #f8fafc;
+      font-family: inherit;
+    }
+    .leaflet-bar a {
+      background: #000000 !important;
+      color: #ffffff !important;
+      border: none !important;
+    }
+
+    /* Live CCTV scanline effect */
+    .scanlines {
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+      background-size: 100% 3px, 6px 100%;
+    }
+  </style>
+</head>
+<body class="bg-neutral-950 text-qb-black font-sans min-h-screen flex items-center justify-center p-0 md:p-6 overflow-hidden">
+
+  <!-- Mobile Viewport Shell (Strict Uber Monochrome Aesthetic) -->
+  <div id="deviceShell" class="relative w-full max-w-[440px] h-[100dvh] md:h-[890px] bg-qb-white text-qb-black shadow-2xl md:rounded-[44px] md:border-[10px] md:border-neutral-900 overflow-hidden flex flex-col">
+    
+    <!-- Audio synthesizer context trigger banner -->
+    <div id="soundTogglePrompt" class="hidden absolute top-12 left-1/2 -translate-x-1/2 z-50 bg-black text-white px-4 py-2 rounded-full text-xs font-semibold shadow-2xl flex items-center gap-2">
+      <i class="fa-solid fa-volume-high text-emerald-400"></i>
+      <span>Tap anywhere to enable sound engine</span>
+    </div>
+
+    <!-- Universal In-App Notification Toast -->
+    <div id="appToast" class="fixed md:absolute top-12 left-1/2 -translate-x-1/2 z-50 bg-black text-white px-5 py-3 rounded-full text-xs font-bold shadow-2xl transition-all duration-300 transform -translate-y-24 opacity-0 pointer-events-none flex items-center gap-2.5 max-w-[90%] border border-neutral-800">
+      <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400"></i>
+      <span id="toastMsg">Notification message</span>
+    </div>
+
+    <!-- Phone Top Status Bar -->
+    <div class="px-7 pt-3 pb-1 flex justify-between items-center text-xs font-bold text-black bg-white select-none z-30 shrink-0 border-b border-qb-gray100">
+      <span id="clockDisplay" class="font-mono">14:24</span>
+      <div class="w-24 h-4 bg-black rounded-full hidden md:block"></div>
+      <div class="flex items-center gap-2">
+        <span class="text-[9px] bg-neutral-100 text-neutral-800 font-extrabold px-1.5 py-0.5 rounded tracking-wider">5G</span>
+        <i class="fa-solid fa-signal text-[10px]"></i>
+        <i class="fa-solid fa-wifi text-[10px]"></i>
+        <i class="fa-solid fa-battery-full text-xs"></i>
+      </div>
+    </div>
+
+    <!-- MAIN SCROLLABLE APP VIEWPORT -->
+    <main id="viewportContainer" class="flex-1 overflow-y-auto no-scrollbar relative flex flex-col bg-white">
+
+      <!-- ============================================================ -->
+      <!-- 0. SPLASH / RUNNING CAR PRELOADER                            -->
+      <!-- ============================================================ -->
+      <section id="screen-splash" class="absolute inset-0 bg-black text-white z-40 flex flex-col justify-between p-8 transition-opacity duration-700">
+        <div class="flex items-center justify-between pt-4">
+          <div class="flex items-center gap-2">
+            <span class="bg-white text-black font-black text-xs px-2 py-0.5 rounded-sm tracking-tighter">QB</span>
+            <span class="text-xs font-black tracking-widest uppercase text-neutral-300">TIRUVALLUR HUB</span>
+          </div>
+          <span class="text-[10px] text-neutral-400 font-mono">v3.4-PILOT</span>
+        </div>
+
+        <!-- Dynamic Running Car Animation Scene -->
+        <div class="flex flex-col items-center justify-center my-auto">
+          <div class="relative w-64 h-32 flex items-center justify-center">
+            
+            <!-- Exhaust Puffs -->
+            <div class="absolute left-8 bottom-7 w-3 h-3 bg-neutral-400 rounded-full smoke-1"></div>
+            <div class="absolute left-10 bottom-8 w-2.5 h-2.5 bg-neutral-500 rounded-full smoke-2"></div>
+
+            <!-- Vector Car Silhouette with Rotating Wheels -->
+            <div class="car-chassis relative z-10">
+              <svg class="w-44 h-20 text-white fill-current filter drop-shadow-lg" viewBox="0 0 160 65">
+                <!-- Aerodynamic Sedan Shell -->
+                <path d="M12,42 L28,42 C30,31 41,22 54,22 L112,22 C120,22 128,27 132,35 L148,39 C155,41 160,46 160,53 L160,56 L0,56 L0,50 C0,45.5 5,42 12,42 Z" />
+                <!-- Tinted Windows Glass -->
+                <path d="M53,26 L108,26 C113,26 118,29 121,35 L48,35 C49,32 50,27 53,26 Z" fill="#000000" />
+                <!-- Headlight & Taillight -->
+                <polygon points="156,45 160,45 160,49 154,49" fill="#05a357" />
+                <polygon points="0,45 4,45 4,49 0,49" fill="#e11900" />
+                <!-- Wheel Wells -->
+                <circle cx="38" cy="56" r="13" fill="#000000" />
+                <circle cx="126" cy="56" r="13" fill="#000000" />
+              </svg>
+
+              <!-- Front Wheel -->
+              <div class="absolute right-[22px] bottom-[-2px] w-7 h-7 rounded-full bg-neutral-900 border-2 border-white flex items-center justify-center wheel-rotate">
+                <div class="w-5 h-5 rounded-full border border-dashed border-neutral-300 flex items-center justify-center">
+                  <div class="w-1.5 h-1.5 bg-white rounded-full"></div>
+                </div>
+              </div>
+
+              <!-- Rear Wheel -->
+              <div class="absolute left-[24px] bottom-[-2px] w-7 h-7 rounded-full bg-neutral-900 border-2 border-white flex items-center justify-center wheel-rotate">
+                <div class="w-5 h-5 rounded-full border border-dashed border-neutral-300 flex items-center justify-center">
+                  <div class="w-1.5 h-1.5 bg-white rounded-full"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Asphalt Road with Moving Dash lines -->
+            <div class="absolute bottom-2 w-64 h-2 bg-neutral-800 rounded-full overflow-hidden">
+              <div class="road-lines w-[360px] h-full absolute left-0 top-0"></div>
+            </div>
+          </div>
+
+          <h1 class="text-3xl font-black tracking-tighter text-white mt-6">Quick<span class="text-neutral-400">Bay</span></h1>
+          <p class="text-xs text-neutral-400 font-medium tracking-wide mt-1.5">Direct OEM Multi-Brand Service Network</p>
+          
+          <!-- Live Connecting Status -->
+          <div class="mt-6 flex items-center gap-2 bg-neutral-900 border border-neutral-800 px-3 py-1.5 rounded-full">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+            <span id="splashStatusText" class="text-[11px] font-mono text-neutral-300">Syncing 20 Tiruvallur Workshops...</span>
+          </div>
+        </div>
+
+        <div class="pb-4">
+          <button onclick="dismissSplash()" class="w-full bg-white hover:bg-neutral-200 text-black py-4 rounded-2xl font-black text-sm tracking-wide transition flex items-center justify-center gap-2 active:scale-95">
+            <span>Enter Network</span>
+            <i class="fa-solid fa-arrow-right text-xs"></i>
+          </button>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- 1. AUTH SCREEN: FULL NAME, EMAIL & MOBILE NUMBER             -->
+      <!-- ============================================================ -->
+      <section id="screen-auth" class="hidden p-6 flex flex-col justify-between flex-1 bg-white">
+        <div class="space-y-6 pt-2">
+          <!-- Back button / Logo -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <div class="w-8 h-8 bg-black rounded-xl flex items-center justify-center text-white font-black text-sm">QB</div>
+              <span class="text-base font-black tracking-tight uppercase">QuickBay ID</span>
+            </div>
+            <span class="text-[11px] font-mono bg-neutral-100 text-neutral-800 px-2 py-1 rounded-md font-semibold">Step 1 of 3</span>
+          </div>
+
+          <div>
+            <h2 class="text-2xl font-black tracking-tight text-black leading-snug">Create your driver account</h2>
+            <p class="text-xs text-neutral-500 mt-1">Direct tie-ups with verified garages in Tiruvallur district.</p>
+          </div>
+
+          <!-- User Interactive Form Inputs -->
+          <div class="space-y-4 pt-1">
+            <!-- Full Name -->
+            <div>
+              <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Full Name</label>
+              <div class="mt-1 relative">
+                <input type="text" id="authNameInput" placeholder="Enter your full name" 
+                  class="w-full p-3.5 bg-neutral-100 border border-neutral-300 rounded-xl text-sm font-bold text-black placeholder:text-neutral-400 focus:bg-white focus:border-black focus:outline-none transition" />
+                <i class="fa-solid fa-user absolute right-3.5 top-4 text-xs text-neutral-400"></i>
+              </div>
+            </div>
+
+            <!-- Email Address -->
+            <div>
+              <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Email Address (For Tax Invoices)</label>
+              <div class="mt-1 relative">
+                <input type="email" id="authEmailInput" placeholder="name@example.com" 
+                  class="w-full p-3.5 bg-neutral-100 border border-neutral-300 rounded-xl text-sm font-semibold text-black placeholder:text-neutral-400 focus:bg-white focus:border-black focus:outline-none transition" />
+                <i class="fa-solid fa-envelope absolute right-3.5 top-4 text-xs text-neutral-400"></i>
+              </div>
+            </div>
+
+            <!-- Phone Number Input -->
+            <div>
+              <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500">10-Digit Mobile Number</label>
+              <div class="flex items-center gap-2 mt-1">
+                <div class="flex items-center gap-1.5 bg-neutral-100 border border-neutral-300 rounded-xl px-3 py-3.5 text-sm font-bold text-black">
+                  <span>🇮🇳</span>
+                  <span>+91</span>
+                </div>
+                <input type="tel" id="authPhoneInput" maxlength="10" placeholder="Enter 10-digit number" 
+                  class="flex-1 p-3.5 bg-neutral-100 border border-neutral-300 rounded-xl text-sm font-bold tracking-wider text-black placeholder:text-neutral-400 focus:bg-white focus:border-black focus:outline-none transition" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Test Auto-fill helper -->
+          <button onclick="autofillUserDetails()" class="w-full py-2 bg-neutral-100 hover:bg-neutral-200 border border-dashed border-neutral-300 rounded-xl text-xs font-semibold text-neutral-700 flex items-center justify-center gap-2 transition">
+            <i class="fa-solid fa-wand-magic-sparkles text-black"></i>
+            <span>Fill Demo User Credentials (Arun - Tiruvallur)</span>
+          </button>
+        </div>
+
+        <div class="pt-6 pb-2 space-y-3">
+          <button onclick="sendUserOTP()" class="w-full bg-black hover:bg-neutral-800 text-white font-black py-4 rounded-xl text-sm tracking-wide transition flex items-center justify-center gap-2 active:scale-95 shadow-xl">
+            <span>Send One-Time Password</span>
+            <i class="fa-solid fa-arrow-right text-xs"></i>
+          </button>
+          <p class="text-[10px] text-neutral-400 text-center">Your privacy is guaranteed. Real-time updates delivered via WhatsApp.</p>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- 2. AUTH SCREEN: OTP VERIFICATION & SMS SIMULATION            -->
+      <!-- ============================================================ -->
+      <section id="screen-otp" class="hidden p-6 flex flex-col justify-between flex-1 bg-white">
+        <div class="space-y-6 pt-2">
+          <button onclick="switchScreen('screen-auth')" class="w-10 h-10 rounded-full bg-neutral-100 flex items-center justify-center hover:bg-neutral-200 transition">
+            <i class="fa-solid fa-arrow-left text-xs text-black"></i>
+          </button>
+
+          <div>
+            <span class="text-[11px] font-mono bg-neutral-100 text-neutral-800 px-2 py-1 rounded-md font-semibold">Step 2 of 3</span>
+            <h2 class="text-2xl font-black tracking-tight text-black mt-2">Enter 4-digit SMS Code</h2>
+            <p class="text-xs text-neutral-500 mt-1">Verification token dispatched to <span id="otpTargetPhone" class="font-bold text-black">+91 98402 12345</span></p>
+          </div>
+
+          <!-- SMS Notification Simulator Banner -->
+          <div class="bg-black text-white p-4 rounded-2xl border border-neutral-800 shadow-xl flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center">
+                <i class="fa-solid fa-comment-sms text-emerald-400 text-xs"></i>
+              </div>
+              <div>
+                <p class="text-[10px] uppercase font-bold text-neutral-400">QuickBay SMS Gateway</p>
+                <p class="text-xs font-mono font-bold text-white">Your OTP is: <span class="text-emerald-400 underline">8842</span></p>
+              </div>
+            </div>
+            <button onclick="autofillOTP('8842')" class="bg-white text-black px-3 py-1 rounded-lg text-xs font-black hover:bg-neutral-200 transition">
+              Use 8842
+            </button>
+          </div>
+
+          <!-- 4 Digit Inputs -->
+          <div class="flex justify-between max-w-[280px] mx-auto gap-3 pt-2">
+            <input type="text" id="otp-digit-1" maxlength="1" class="otp-cell w-14 h-16 bg-neutral-100 border-2 border-neutral-300 focus:border-black rounded-2xl text-2xl font-black text-center text-black focus:bg-white focus:outline-none transition" autofocus />
+            <input type="text" id="otp-digit-2" maxlength="1" class="otp-cell w-14 h-16 bg-neutral-100 border-2 border-neutral-300 focus:border-black rounded-2xl text-2xl font-black text-center text-black focus:bg-white focus:outline-none transition" />
+            <input type="text" id="otp-digit-3" maxlength="1" class="otp-cell w-14 h-16 bg-neutral-100 border-2 border-neutral-300 focus:border-black rounded-2xl text-2xl font-black text-center text-black focus:bg-white focus:outline-none transition" />
+            <input type="text" id="otp-digit-4" maxlength="1" class="otp-cell w-14 h-16 bg-neutral-100 border-2 border-neutral-300 focus:border-black rounded-2xl text-2xl font-black text-center text-black focus:bg-white focus:outline-none transition" />
+          </div>
+
+          <div class="flex justify-between items-center text-xs pt-2">
+            <span class="text-neutral-500">Didn't receive SMS?</span>
+            <button id="resendOtpTimerBtn" onclick="resendOtpChime()" class="font-bold text-black hover:underline disabled:text-neutral-400">
+              Resend in (29s)
+            </button>
+          </div>
+        </div>
+
+        <div class="pt-6 pb-2">
+          <button onclick="verifyUserOTP()" class="w-full bg-black hover:bg-neutral-800 text-white font-black py-4 rounded-xl text-sm tracking-wide transition flex items-center justify-center gap-2 active:scale-95 shadow-xl">
+            <span>Verify & Configure Car</span>
+            <i class="fa-solid fa-arrow-right text-xs"></i>
+          </button>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- 3. VEHICLE GARAGE: ALL INDIAN CAR BRANDS & HOLOGRAM PLATE    -->
+      <!-- ============================================================ -->
+      <section id="screen-garage" class="hidden p-6 flex flex-col justify-between flex-1 bg-white overflow-y-auto no-scrollbar">
+        <div class="space-y-5 pt-1">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] font-mono bg-neutral-100 text-neutral-800 px-2 py-1 rounded-md font-semibold">Step 3 of 3</span>
+              <span class="text-xs font-bold uppercase text-neutral-400">Digital Garage</span>
+            </div>
+            <sp
